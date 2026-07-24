@@ -1,4 +1,9 @@
-# Build-script approval (pnpm 10+): native postinstall builds we explicitly trust.
+# Build-script approval: native postinstall builds we explicitly trust.
+# pnpm 11 uses allowBuilds (per-package boolean); onlyBuiltDependencies kept
+# for pnpm 10 compatibility.
+allowBuilds:
+  sharp: true
+  unrs-resolver: true
 onlyBuiltDependencies:
   - sharp
   - unrs-resolver
