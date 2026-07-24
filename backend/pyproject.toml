@@ -1,0 +1,40 @@
+[project]
+name = "babysitter-backend"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.18.5",
+    "anthropic>=0.119.0",
+    "asyncpg>=0.31.0",
+    "fastapi>=0.115",
+    "httpx>=0.28.1",
+    "psycopg2-binary>=2.9.12",
+    "pydantic-settings>=2.14.2",
+    "pyjwt[crypto]>=2.13.0",
+    "sqlalchemy[asyncio]>=2.0",
+    "sse-starlette>=3.4.6",
+    "uvicorn[standard]>=0.51.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "pyyaml>=6.0.3",
+    "respx>=0.23.1",
+    "ruff>=0.16.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+# Live evals never run by default — even with ANTHROPIC_API_KEY in the env.
+# Opt in explicitly: `uv run pytest -m eval_live`.
+addopts = ["-m", "not eval_live"]
+markers = [
+    "eval_live: evaluation tests that hit the live Anthropic API (excluded from offline runs)",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"

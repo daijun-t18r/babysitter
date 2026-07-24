@@ -1,0 +1,23 @@
+# Secrets — never commit real env files
+.env
+.env.*
+!.env.example
+!.env.local.example
+
+# OS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+.next/
+
+# Tool state
+.omc/
+.claude/settings.local.json
