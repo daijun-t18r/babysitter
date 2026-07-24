@@ -1,6 +1,4 @@
-allowBuilds:
-  sharp: set this to true or false
-  unrs-resolver: set this to true or false
-ignoredBuiltDependencies:
+# Build-script approval (pnpm 10+): native postinstall builds we explicitly trust.
+onlyBuiltDependencies:
   - sharp
   - unrs-resolver
