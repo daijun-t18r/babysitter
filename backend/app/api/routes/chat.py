@@ -345,10 +345,18 @@ async def chat_turn_events(turn: ChatTurn) -> AsyncIterator[tuple[str, dict[str,
         # Client disconnected mid-stream: persist what we have, then re-raise.
         await _persist_best_effort(turn, state, dosing)
         raise
-    except Exception as exc:
+    except Exception:
         logger.exception("chat stream failed")
+        # Never leak raw upstream errors to a parent at 3am; the client renders
+        # its own escalation fallback copy alongside this generic message.
         with contextlib.suppress(Exception):
-            yield ("error", {"code": "upstream_error", "message": str(exc)})
+            yield (
+                "error",
+                {
+                    "code": "upstream_error",
+                    "message": "I'm having trouble answering right now.",
+                },
+            )
         await _persist_best_effort(turn, state, dosing)
     finally:
         if not classifier_task.done():
