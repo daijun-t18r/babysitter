@@ -72,9 +72,15 @@ Realtime triage during calls: while a call is active the frontend subscribes (Su
 
 ## Other endpoints
 - `GET /api/v1/me` → `{user_id, email, profile:{...}, children:[...]}`
+- `DELETE /api/v1/me` → 204 (GDPR account deletion, see Data governance; 502 = nothing deleted, retry later; 503 = deletion not configured). Frontend: `/settings` (gear icon on the history header) requires typing `DELETE`, then calls this, signs out of Supabase, and redirects to `/login?farewell=1`.
 - `POST /api/v1/children` / `PATCH /api/v1/children/{id}` — fields: name, birth_date, due_date?, feeding_type?, notes?, pediatrician_name?, pediatrician_phone?
 - `GET /api/v1/conversations?limit=` / `GET /api/v1/conversations/{id}` (with messages)
 - `GET /healthz`
+
+## Offline (frontend PWA)
+- `frontend/public/sw.js` — hand-rolled service worker (no next-pwa), cache name versioned `mc-v1` (bump on any precache/strategy change; activate deletes older versions). Registered by `RegisterServiceWorker` in the root layout: production builds + browsers with SW support only, silent no-op otherwise. `sw.js` is excluded from the auth middleware matcher so registration works logged-out.
+- Strategy: precache `/sos` + manifest + icons on install; `/sos` requests (HTML and RSC payloads — Next's `Vary` header keeps them apart) are network-first with cached fallback; `/_next/static/*`, `/icons/*`, and the manifest are cache-first (hashed chunks land in the cache on the first online visit, after which `/sos` renders fully offline); `/api/*`, `/auth*`, non-GET, and cross-origin requests are NEVER intercepted or cached. Emergency numbers are compiled into the bundle (`src/lib/emergency.ts`), never fetched.
+- Dev caveats: `next dev` never registers the SW. After serving a production build on localhost, unregister the worker (DevTools → Application → Service Workers) or later dev sessions may get stale cached chunks. Safety pages must never depend on the SW being present — it is an enhancement layer only.
 
 ## Passive memory (Phase 3)
 Flow: after each completed chat exchange the backend runs extraction (small model, async, from the USER message only) → events land `confirmed=false`. The frontend fetches pending events after the `done` SSE event and renders inline confirm cards. **Unconfirmed events are never injected into prompts** (query-layer invariant). Voice-mode batch confirm (post-call review screen) is Phase 2 scope.
@@ -88,6 +94,13 @@ Extraction JSON (backend-internal): `{"events":[{"kind":"feeding|sleep|diaper|sy
 - `DELETE /api/v1/events/{id}` → 204 (dismiss; 400 if already confirmed — confirmed events are not deletable from the UI in MVP)
 - `GET /api/v1/morning-summary?tz_offset_minutes=` → `{"summary": string|null, "night_date"?: "YYYY-MM-DD"}` — tz_offset_minutes = `-new Date().getTimezoneOffset()`. Night window 20:00–06:00 local; null before 06:00, with no night activity, or on summarizer failure. Passive: frontend only calls between 06:00–20:00 local and remembers dismissal per night_date in localStorage. No push notifications.
 
+## Data governance (GDPR Art.17 account deletion — launch gate 4a)
+`DELETE /api/v1/me` (Supabase-authed like every /api/v1 route) erases the account and ALL app data:
+- The backend makes ONE delete call: Supabase Auth Admin API (`DELETE {SUPABASE_URL}/auth/v1/admin/users/{user_id}`, service-role key, 5s timeout). It performs NO app-side deletes.
+- Erasure rides the schema's cascade chain: `auth.users` → `profiles` (ON DELETE CASCADE) → `children`, `conversations`, `events`, `safety_events` (all CASCADE on `profiles.id`/`children.id`) → `messages` (CASCADE on `conversations.id`). What disappears: profile, children, all conversations + messages (text and voice), confirmed + pending events, and the safety-event audit trail.
+- Atomicity: the cascade is the only deletion mechanism. Admin call fails → 502 and NOTHING is deleted anywhere (no partial app-side delete can orphan the auth user). `SUPABASE_SERVICE_ROLE_KEY` unset → 503. Identity comes only from the verified token — deleting another user's account is structurally impossible.
+- Success → 204; the frontend must sign out locally afterwards (the Supabase session is dead server-side).
+
 ## Triage tag protocol (backend-internal, documented for tests)
 Model must begin EVERY reply with exactly one leading tag:
 `<triage level="none|see_doctor|urgent|emergency|crisis" reason="<slug>"/>`
@@ -96,4 +109,4 @@ Backend buffers ≤120 chars to parse+strip; malformed → log + treat as none +
 
 ## Env vars
 Frontend (`frontend/.env.local`): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_VAPI_PUBLIC_KEY` + `NEXT_PUBLIC_VAPI_ASSISTANT_ID` (Phase 2 voice — both unset: call UI hidden entirely, text chat unchanged)
-Backend (`backend/.env`): `SUPABASE_URL`, `DATABASE_URL`, `ANTHROPIC_API_KEY`, `CHAT_MODEL=claude-sonnet-5`, `SAFETY_MODEL=claude-haiku-4-5-20251001`, `ALLOWED_ORIGINS`, `ENV`, `LOG_LEVEL`, `VAPI_SHARED_SECRET` (shared with the Vapi assistant's custom-LLM header config AND used to sign voice session tokens; unset = voice disabled outside dev)
+Backend (`backend/.env`): `SUPABASE_URL`, `DATABASE_URL`, `ANTHROPIC_API_KEY`, `CHAT_MODEL=claude-sonnet-5`, `SAFETY_MODEL=claude-haiku-4-5-20251001`, `ALLOWED_ORIGINS`, `ENV`, `LOG_LEVEL`, `VAPI_SHARED_SECRET` (shared with the Vapi assistant's custom-LLM header config AND used to sign voice session tokens; unset = voice disabled outside dev), `SUPABASE_SERVICE_ROLE_KEY` (Auth Admin API, ONLY used by GDPR account deletion; unset = `DELETE /api/v1/me` answers 503)

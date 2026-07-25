@@ -15,6 +15,7 @@ from app.db.engine import service_session, user_scoped_session
 from app.db.models import SafetyEvent
 from app.db.repo import Repo
 from app.services.safety.classifier import SafetyClassifier
+from app.services.supabase_admin import SupabaseAdmin
 
 logger = logging.getLogger(__name__)
 
@@ -106,3 +107,7 @@ def get_chat_service(request: Request) -> ChatService:
 
 def get_classifier(request: Request) -> SafetyClassifier:
     return request.app.state.classifier
+
+
+def get_supabase_admin(request: Request) -> SupabaseAdmin:
+    return request.app.state.supabase_admin

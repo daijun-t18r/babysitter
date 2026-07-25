@@ -1,15 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type Status = "idle" | "sending" | "sent" | "error";
 
+/** The URL query never changes without a navigation — nothing to subscribe to. */
+function subscribeNoop(): () => void {
+  return () => {};
+}
+
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Shown after account deletion (?farewell=1). Read from window instead of
+  // useSearchParams to keep this page statically prerenderable; the server
+  // snapshot is false so hydration stays consistent.
+  const farewell = useSyncExternalStore(
+    subscribeNoop,
+    () => new URLSearchParams(window.location.search).has("farewell"),
+    () => false,
+  );
 
   const supabase = getSupabaseBrowserClient();
 
@@ -55,6 +68,13 @@ export default function LoginPage() {
           A calm voice for the hardest hours.
         </p>
       </div>
+
+      {farewell && (
+        <p className="mb-6 rounded-2xl bg-surface p-5 text-center leading-relaxed text-muted">
+          Your account and everything in it has been deleted. Thank you for
+          letting us keep you company — you’re always welcome back.
+        </p>
+      )}
 
       {!supabase ? (
         <p className="rounded-2xl bg-surface p-5 text-center text-muted">
