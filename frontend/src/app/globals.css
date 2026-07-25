@@ -1,0 +1,91 @@
+@import "tailwindcss";
+
+/*
+ * Midnight Companion night theme.
+ * Warm blacks and ambers only — no pure white, no blue accents.
+ * Base text 17px for one-handed 3am reading.
+ */
+:root {
+  --background: #161210;
+  --surface: #1f1a17;
+  --surface-raised: #292220;
+  --border: #3a312c;
+  --foreground: #ece3d9;
+  --muted: #a89a8c;
+  --accent: #d99e5a;
+  --accent-soft: #3d2f1f;
+  --amber: #e0a935;
+  --amber-soft: #3b310f;
+  --red: #e4574a;
+  --red-deep: #57201a;
+  --indigo: #8d86c9;
+  --indigo-deep: #262040;
+  --green-soft: #7fae7a;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-border-soft: var(--border);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-warn: var(--amber);
+  --color-danger: var(--red);
+  --color-danger-deep: var(--red-deep);
+  --color-calm: var(--indigo);
+  --color-calm-deep: var(--indigo-deep);
+  --font-sans: ui-rounded, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Helvetica Neue", Arial, sans-serif;
+}
+
+html {
+  font-size: 17px;
+  height: 100%;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: ui-rounded, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Helvetica Neue", Arial, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  min-height: 100%;
+}
+
+/* Safe-area helpers for viewport-fit=cover (notch / home indicator). */
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* 4-7-8 breathing: inhale 4s, hold 7s, exhale 8s (19s cycle). */
+@keyframes breathe-478 {
+  0% {
+    transform: scale(0.55);
+  }
+  21.05% {
+    transform: scale(1);
+  } /* end inhale (4s) */
+  57.89% {
+    transform: scale(1);
+  } /* end hold (+7s) */
+  100% {
+    transform: scale(0.55);
+  } /* end exhale (+8s) */
+}
+
+.breathing-circle {
+  animation: breathe-478 19s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .breathing-circle {
+    animation: none;
+    transform: scale(0.85);
+  }
+}
