@@ -1,10 +1,23 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useRouter } from "next/navigation";
 import { apiJson, ApiError, getApiBaseUrl } from "@/lib/api";
 import { formatChildAge, nightGreeting } from "@/lib/age";
+import { isVoiceConfigured } from "@/lib/vapi";
 import type { Child, MeResponse } from "@/lib/types";
+import { CallOverlay } from "@/components/call/CallOverlay";
+import { useCallSafetyEvents } from "@/components/call/useCallSafetyEvents";
+import {
+  formatTranscriptNote,
+  useVoiceCall,
+} from "@/components/call/useVoiceCall";
 import { ChatHeader } from "@/components/chat/ChatHeader";
 import { Composer } from "@/components/chat/Composer";
 import { EmergencySheet } from "@/components/chat/EmergencySheet";
@@ -38,11 +51,45 @@ export default function ChatPage() {
     status,
     errorMessage,
     send,
+    appendContextNote,
+    applySafetySignal,
     markEmergencyHandled,
     dismissCrisis,
   } = useChatStream(child?.id ?? null);
 
   const scrollAnchorRef = useRef<HTMLDivElement>(null);
+
+  // ---- Voice call (env-gated; hidden entirely when Vapi vars are unset) ----
+  const voiceConfigured = isVoiceConfigured();
+  const voice = useVoiceCall(child?.id ?? null);
+  const callInProgress =
+    voice.status === "connecting" || voice.status === "active";
+  // "Switch to text" (vs plain hang-up) drops the transcript into the thread.
+  const dropTranscriptRef = useRef(false);
+
+  // Triage during calls: safety_events INSERTs → same safety state/cards.
+  useCallSafetyEvents(callInProgress, applySafetySignal);
+
+  const handleSwitchToText = useCallback(() => {
+    dropTranscriptRef.current = true;
+    voice.end();
+  }, [voice]);
+
+  // When a call finishes (hang-up, assistant end, or failure), land the
+  // parent back in text mode; on switch-to-text or error keep the context.
+  const prevVoiceStatusRef = useRef(voice.status);
+  useEffect(() => {
+    const prev = prevVoiceStatusRef.current;
+    prevVoiceStatusRef.current = voice.status;
+    if (prev === voice.status) return;
+    if (voice.status !== "ended" && voice.status !== "error") return;
+    if (dropTranscriptRef.current || voice.status === "error") {
+      const note = formatTranscriptNote(voice.captions);
+      if (note) appendContextNote(note);
+    }
+    dropTranscriptRef.current = false;
+    voice.reset();
+  }, [voice, appendContextNote]);
 
   useEffect(() => {
     let cancelled = false;
@@ -157,6 +204,21 @@ export default function ChatPage() {
           <PendingEvents childId={child?.id ?? null} refreshKey={assistantCount} />
         )}
 
+        {/* Voice failures fail INTO text mode: gentle note + standing
+            emergency copy, never a dead end. */}
+        {voice.errorMessage && !callInProgress && (
+          <div className="mt-3 rounded-xl border border-border-soft bg-surface px-4 py-3 text-muted">
+            <p>{voice.errorMessage}</p>
+            <p className="mt-1 text-sm">
+              Worried right now? Call your pediatrician or{" "}
+              <a href="tel:911" className="font-semibold text-foreground underline">
+                911
+              </a>
+              .
+            </p>
+          </div>
+        )}
+
         {errorMessage && status === "error" && (
           <div className="mt-3 rounded-xl border border-border-soft bg-surface px-4 py-3 text-muted">
             <p>{errorMessage}</p>
@@ -181,6 +243,9 @@ export default function ChatPage() {
         )}
         <Composer
           onSend={send}
+          onCall={
+            voiceConfigured && loadState === "ready" ? voice.start : undefined
+          }
           disabled={loadState !== "ready" || status === "streaming"}
         />
         <p className="px-4 pt-2 text-center text-xs text-muted">
@@ -194,6 +259,33 @@ export default function ChatPage() {
         pediatricianName={child?.pediatrician_name}
         pediatricianPhone={child?.pediatrician_phone}
       />
+
+      {callInProgress && (
+        <CallOverlay
+          childName={child?.name ?? null}
+          status={voice.status === "active" ? "active" : "connecting"}
+          captions={voice.captions}
+          isMuted={voice.isMuted}
+          assistantSpeaking={voice.assistantSpeaking}
+          onToggleMute={voice.toggleMute}
+          onSwitchToText={handleSwitchToText}
+          onEnd={voice.end}
+          safetyCards={
+            <>
+              {safety.emergencyActive && (
+                <EmergencyCard
+                  reason={safety.emergencyReason}
+                  pediatricianPhone={child?.pediatrician_phone ?? null}
+                  pediatricianName={child?.pediatrician_name}
+                  onHandled={markEmergencyHandled}
+                  onTellMore={handleSwitchToText}
+                />
+              )}
+              {safety.crisisActive && <CrisisCard onDismiss={dismissCrisis} />}
+            </>
+          }
+        />
+      )}
     </div>
   );
 }

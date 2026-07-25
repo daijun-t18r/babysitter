@@ -16,6 +16,7 @@ from app.api.routes import (
     me,
     openai_compat,
     summary,
+    voice,
 )
 from app.core.config import get_settings
 from app.services.memory import MemoryExtractor, MorningSummarizer
@@ -47,6 +48,8 @@ def create_app(
     app.state.memory_extractor = memory_extractor or MemoryExtractor()
     app.state.morning_summarizer = morning_summarizer or MorningSummarizer()
     app.state.morning_cache = {}
+    # Vapi call id → conversation id (per-process, bounded in openai_compat).
+    app.state.voice_call_conversations = {}
 
     app.include_router(health.router)
     app.include_router(me.router, prefix="/api/v1")
@@ -55,6 +58,7 @@ def create_app(
     app.include_router(chat.router, prefix="/api/v1")
     app.include_router(events.router, prefix="/api/v1")
     app.include_router(summary.router, prefix="/api/v1")
+    app.include_router(voice.router, prefix="/api/v1")
     app.include_router(openai_compat.router)
     return app
 

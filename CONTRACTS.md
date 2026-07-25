@@ -43,8 +43,32 @@ event: error   data: {"code":"upstream_error","message":"…"}
 ```
 Client: `fetch()` + ReadableStream parsing (NOT EventSource — needs POST + auth header).
 
-## POST /v1/chat/completions  (OpenAI-compatible, for Vapi custom-LLM — Phase 2)
-Same brain/safety pipeline internally. Triage tag stripped before returning; triage side-channel via `safety_events` insert → Supabase Realtime.
+## Voice (Phase 2 — Vapi custom LLM)
+One brain, two transports: Vapi calls our OpenAI-compatible endpoint below as a custom LLM; text chat keeps its SSE path. Same safety pipeline for both.
+
+### POST /api/v1/voice/session  (Supabase-authed like all /api/v1 routes)
+Request: `{"child_id": "uuid"}` — child ownership verified (404 otherwise).
+Response: `{"token": "<payload_b64url>.<sig_b64url>", "expires_at": "ISO8601"}`
+Token = `base64url(JSON {user_id, child_id, exp})` + `.` + `base64url(HMAC-SHA256(VAPI_SHARED_SECRET, payload_b64url))`; `exp` ≤ 15 min. 503 when `VAPI_SHARED_SECRET` is unset.
+Frontend flow: mint token → `vapi.start(NEXT_PUBLIC_VAPI_ASSISTANT_ID, { metadata: { session_token: token } })`; Vapi echoes the metadata into every custom-LLM request. Invalid/expired token → the custom-LLM endpoint refuses (no child data ever flows on an unverified token).
+
+### POST /v1/chat/completions  (called by Vapi)
+Auth — both layers required, fail-closed 401:
+1. `X-Vapi-Secret` header must equal `VAPI_SHARED_SECRET` (constant-time compare).
+2. Session token, read from **`body.metadata.session_token`** (primary documented location), with fallback `body.call.assistantOverrides.metadata.session_token` (the shape Vapi echoes assistant metadata into). Missing/invalid/expired → 401.
+
+Dev-only fallback: `ENV=dev` with `VAPI_SHARED_SECRET` unset serves an anonymous generic-child-context reply (tag strip + dosing filter still apply; nothing persisted or audited). Outside dev an unset secret → 503.
+
+Pipeline (same brain as /api/v1/chat): rules engine on the latest user message (child age from the token-bound profile), prompt = child context + confirmed events, Claude stream, triage tag stripped, dosing-leak filter, `safety_events` audit writes, user+assistant messages persisted with `input_mode='voice'`. Conversation history comes from Vapi's request body (last 21 messages), not the DB. Messages land in one conversation per Vapi call (`call.id` → conversation map, best-effort per-process; falls back to a fresh conversation).
+
+Response: OpenAI `chat.completion.chunk` SSE frames (`data: {...}\n\n`, first chunk `{"role":"assistant"}`, last data chunk `finish_reason:"stop"`, terminated by `data: [DONE]`). `stream=false` → single `chat.completion` JSON.
+
+Triage side-channel: safety events never appear in the OpenAI stream. The PWA subscribes to Supabase Realtime on `safety_events` (added to the `supabase_realtime` publication in migration 002; RLS select policy scopes rows per user) and renders cards from inserts. Escalation numbers embedded in the spoken text are the double insurance.
+
+### Frontend call UI (Phase 2)
+Env-gated by `NEXT_PUBLIC_VAPI_PUBLIC_KEY` + `NEXT_PUBLIC_VAPI_ASSISTANT_ID` — either unset hides the call UI entirely (text chat unchanged). Flow: mint session token → `vapi.start(NEXT_PUBLIC_VAPI_ASSISTANT_ID, { metadata: { session_token } })` (Vapi Web SDK merges this into `assistantOverrides`). Live captions from Vapi `message` events (`type="transcript"`; partials replace the in-flight caption, `transcriptType="final"` freezes it). Any voice failure fails INTO text mode with a gentle inline note + tappable 911 — never a dead end.
+
+Realtime triage during calls: while a call is active the frontend subscribes (Supabase browser client) to `postgres_changes` INSERT on `public.safety_events` with filter `user_id=eq.<uid>`, and surfaces `emergency`/`crisis` rows over the call overlay using the SAME EmergencyCard/CrisisCard components (max-severity + sticky-emergency rules unchanged). Row shape (Realtime payload `new`): `{id, user_id, conversation_id, message_id, source, triage_level, matched_rules: text[]|null, classifier_output, child_age_days, created_at}` — client uses `matched_rules[0]` as the reason slug when present.
 
 ## Other endpoints
 - `GET /api/v1/me` → `{user_id, email, profile:{...}, children:[...]}`
@@ -71,5 +95,5 @@ Reason slugs: `fever_under_3mo | fever_high | breathing | blue_skin | unresponsi
 Backend buffers ≤120 chars to parse+strip; malformed → log + treat as none + stricter output filter. Severity aggregation: max(rules, classifier, model_tag). Fail direction: always over-escalate, never silently pass.
 
 ## Env vars
-Frontend (`frontend/.env.local`): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_API_BASE_URL`
-Backend (`backend/.env`): `SUPABASE_URL`, `DATABASE_URL`, `ANTHROPIC_API_KEY`, `CHAT_MODEL=claude-sonnet-5`, `SAFETY_MODEL=claude-haiku-4-5-20251001`, `ALLOWED_ORIGINS`, `ENV`, `LOG_LEVEL`
+Frontend (`frontend/.env.local`): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_VAPI_PUBLIC_KEY` + `NEXT_PUBLIC_VAPI_ASSISTANT_ID` (Phase 2 voice — both unset: call UI hidden entirely, text chat unchanged)
+Backend (`backend/.env`): `SUPABASE_URL`, `DATABASE_URL`, `ANTHROPIC_API_KEY`, `CHAT_MODEL=claude-sonnet-5`, `SAFETY_MODEL=claude-haiku-4-5-20251001`, `ALLOWED_ORIGINS`, `ENV`, `LOG_LEVEL`, `VAPI_SHARED_SECRET` (shared with the Vapi assistant's custom-LLM header config AND used to sign voice session tokens; unset = voice disabled outside dev)

@@ -12,6 +12,18 @@ export function MessageBubble({
   pediatricianPhone?: string | null;
   pediatricianName?: string | null;
 }) {
+  // Client-side context note (e.g. a voice-call transcript) — centered,
+  // quiet, clearly not a chat bubble.
+  if (message.role === "note") {
+    return (
+      <div className="flex justify-center">
+        <div className="max-w-[92%] whitespace-pre-wrap rounded-xl border border-border-soft bg-surface/60 px-4 py-3 text-sm leading-relaxed text-muted">
+          {message.content}
+        </div>
+      </div>
+    );
+  }
+
   const isUser = message.role === "user";
 
   return (

@@ -443,6 +443,11 @@ def build_app(
     app.dependency_overrides[auth_module.get_current_user] = lambda: TEST_USER
     app.dependency_overrides[deps.get_repo] = lambda: fake_repo
     app.dependency_overrides[deps.get_repo_factory] = lambda: fake_factory
+    # Voice path resolves identity from the session token, then asks for a
+    # factory by user_id; the fake ignores the id (ownership checks are explicit).
+    app.dependency_overrides[deps.get_user_repo_factory] = lambda: (
+        lambda user_id: fake_factory
+    )
     return app
 
 

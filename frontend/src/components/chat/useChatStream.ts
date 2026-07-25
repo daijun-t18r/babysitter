@@ -16,7 +16,8 @@ import {
 
 export interface ChatMessage {
   id: string;
-  role: "user" | "assistant";
+  /** "note" = client-side context note (e.g. a voice-call transcript). */
+  role: "user" | "assistant" | "note";
   content: string;
   triage: TriageLevel;
   triageReason: string | null;
@@ -245,6 +246,26 @@ export function useChatStream(childId: string | null) {
     [childId, status, applySafetySignal],
   );
 
+  /**
+   * Drop a client-side context note into the thread (e.g. the transcript of
+   * a voice call after "switch to text"). Purely visual — never sent to the
+   * backend.
+   */
+  const appendContextNote = useCallback((content: string) => {
+    const trimmed = content.trim();
+    if (!trimmed) return;
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `note-${Date.now()}`,
+        role: "note",
+        content: trimmed,
+        triage: "none",
+        triageReason: null,
+      },
+    ]);
+  }, []);
+
   const markEmergencyHandled = useCallback(() => {
     setSafety((prev) => ({ ...prev, emergencyActive: false }));
   }, []);
@@ -260,6 +281,9 @@ export function useChatStream(childId: string | null) {
     status,
     errorMessage,
     send,
+    appendContextNote,
+    /** Exposed so voice-call realtime triage feeds the same safety state. */
+    applySafetySignal,
     markEmergencyHandled,
     dismissCrisis,
     conversationId: conversationIdRef.current,
