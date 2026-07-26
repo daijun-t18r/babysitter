@@ -3,9 +3,9 @@
 深夜育儿陪伴热线 —— voice-first AI companion for burned-out parents of infants.
 凌晨三点宝宝哭闹时,一键「拨通」一个温柔的夜班护士声音(或随时切回文字),它了解你的宝宝(月龄、喂养方式、今晚发生了什么),给出临床审核过的可信建议,并在真正危险时明确升级(一键拨打医生/911)。**用户是家长,宝宝是上下文。**
 
-- 设计规格(权威):`~/.gstack/projects/daijun-t18r-babysitter/daijunlu-main-design-20260723-143754.md`
+- 设计规格(权威事实源):[docs/DESIGN.md](docs/DESIGN.md)
+- 进度事实源(随阶段更新):[docs/PROGRESS.md](docs/PROGRESS.md)
 - 前后端契约:[CONTRACTS.md](CONTRACTS.md)
-- 实施计划:`~/.claude/plans/i-want-to-create-eager-iverson.md`
 
 ## Stack
 

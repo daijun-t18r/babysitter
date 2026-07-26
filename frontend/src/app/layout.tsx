@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { RegisterServiceWorker } from "@/components/pwa/RegisterServiceWorker";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -31,7 +32,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full antialiased">
-      <body className="flex min-h-full flex-col">{children}</body>
+      <body className="flex min-h-full flex-col">
+        <RegisterServiceWorker />
+        {children}
+      </body>
     </html>
   );
 }

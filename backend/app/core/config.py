@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     supabase_url: str = "http://127.0.0.1:54321"
     database_url: str = "postgresql+asyncpg://postgres:postgres@127.0.0.1:54322/postgres"
 
+    # GDPR account deletion (launch gate 4a): service-role key for the Supabase
+    # Auth Admin API. Empty means DELETE /api/v1/me answers 503.
+    supabase_service_role_key: str = ""
+
     anthropic_api_key: str = ""
     chat_model: str = "claude-sonnet-5"
     safety_model: str = "claude-haiku-4-5-20251001"

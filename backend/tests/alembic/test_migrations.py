@@ -34,15 +34,15 @@ def offline_sql() -> str:
 
 
 class TestRevisionChain:
-    def test_single_head_named_001(self):
+    def test_single_head_named_002(self):
         script = ScriptDirectory.from_config(make_config())
         heads = script.get_heads()
-        assert heads == ["001"]
+        assert heads == ["002"]
 
     def test_chain_walks_to_base(self):
         script = ScriptDirectory.from_config(make_config())
         revisions = list(script.walk_revisions("base", "heads"))
-        assert [r.revision for r in revisions] == ["001"]
+        assert [r.revision for r in revisions] == ["002", "001"]
 
 
 class TestOfflineSql:
@@ -100,3 +100,28 @@ class TestOfflineSql:
     def test_signup_trigger_present(self, offline_sql):
         assert "create trigger on_auth_user_created" in offline_sql
         assert "security definer set search_path = public" in offline_sql
+
+
+class TestRealtimePublication:
+    """002: safety_events joins supabase_realtime (guarded + idempotent)."""
+
+    def test_upgrade_adds_table_to_publication(self, offline_sql):
+        assert (
+            "alter publication supabase_realtime add table public.safety_events"
+            in offline_sql
+        )
+
+    def test_upgrade_guards_on_publication_existence(self, offline_sql):
+        start = offline_sql.index("alter publication supabase_realtime")
+        guard = offline_sql[max(0, start - 600) : start]
+        assert "pg_publication" in guard  # no-op on plain Postgres
+        assert "not exists" in guard  # idempotent re-run
+
+    def test_downgrade_drops_table_from_publication(self):
+        buffer = io.StringIO()
+        command.downgrade(make_config(buffer), "002:001", sql=True)
+        sql = buffer.getvalue()
+        assert (
+            "alter publication supabase_realtime drop table public.safety_events" in sql
+        )
+        assert "pg_publication_tables" in sql  # guarded drop

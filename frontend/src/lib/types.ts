@@ -186,6 +186,37 @@ export interface MorningSummaryResponse {
   night_date?: string;
 }
 
+// ---- Voice (Phase 2) ----
+
+export interface VoiceSessionRequest {
+  child_id: string;
+}
+
+/** Short-lived HMAC-signed token binding {user_id, child_id, exp ≤ 15 min}. */
+export interface VoiceSessionResponse {
+  token: string;
+  expires_at: string;
+}
+
+/**
+ * Row shape of public.safety_events as delivered by Supabase Realtime
+ * (postgres_changes INSERT). Used for triage during voice calls; the first
+ * matched rule doubles as the reason slug when present.
+ */
+export interface SafetyEventRow {
+  id: string;
+  user_id: string;
+  conversation_id: string | null;
+  message_id: string | null;
+  source: string;
+  triage_level: TriageLevel;
+  matched_rules: string[] | null;
+  /** Raw classifier JSON (jsonb) — audit-only, never rendered. */
+  classifier_output: unknown;
+  child_age_days: number | null;
+  created_at: string;
+}
+
 export const EVENT_KIND_EMOJI: Record<EventKind, string> = {
   feeding: "🍼",
   sleep: "😴",

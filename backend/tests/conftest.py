@@ -21,6 +21,7 @@ from app.core import auth as auth_module
 from app.core.auth import AuthenticatedUser
 from app.main import create_app
 from app.services.safety.classifier import ClassifierResult
+from app.services.supabase_admin import SupabaseAdminError
 
 TEST_USER_ID = "11111111-1111-1111-1111-111111111111"
 TEST_USER = AuthenticatedUser(user_id=TEST_USER_ID, email="parent@example.com")
@@ -393,6 +394,19 @@ class FakeRecorder:
         self.events.append(kwargs)
 
 
+class FakeSupabaseAdmin:
+    """Duck-typed drop-in for SupabaseAdmin at the account-deletion seam."""
+
+    def __init__(self, raises: bool = False):
+        self._raises = raises
+        self.deleted: list[str] = []
+
+    async def delete_user(self, user_id: str) -> None:
+        if self._raises:
+            raise SupabaseAdminError("admin API down")
+        self.deleted.append(user_id)
+
+
 def classifier_result(level: TriageLevel, reasons: tuple[str, ...] = ()) -> ClassifierResult:
     return ClassifierResult(
         level=level, reasons=reasons, raw={"triage": level.value, "reasons": list(reasons)}
@@ -421,6 +435,7 @@ def build_app(
     classifier: Any | None = None,
     extractor: Any | None = None,
     summarizer_client: Any | None = None,
+    supabase_admin: Any | None = None,
 ) -> Any:
     from app.services.memory import MorningSummarizer
 
@@ -434,6 +449,7 @@ def build_app(
             or FakeClassifierClient("Rough night, but you handled it. One tip for tonight: keep the swaddle snug."),
             model="test-model",
         ),
+        supabase_admin=supabase_admin or FakeSupabaseAdmin(),
     )
 
     @asynccontextmanager
@@ -443,6 +459,11 @@ def build_app(
     app.dependency_overrides[auth_module.get_current_user] = lambda: TEST_USER
     app.dependency_overrides[deps.get_repo] = lambda: fake_repo
     app.dependency_overrides[deps.get_repo_factory] = lambda: fake_factory
+    # Voice path resolves identity from the session token, then asks for a
+    # factory by user_id; the fake ignores the id (ownership checks are explicit).
+    app.dependency_overrides[deps.get_user_repo_factory] = lambda: (
+        lambda user_id: fake_factory
+    )
     return app
 
 

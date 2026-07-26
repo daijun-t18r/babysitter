@@ -15,10 +15,12 @@ from app.db.engine import service_session, user_scoped_session
 from app.db.models import SafetyEvent
 from app.db.repo import Repo
 from app.services.safety.classifier import SafetyClassifier
+from app.services.supabase_admin import SupabaseAdmin
 
 logger = logging.getLogger(__name__)
 
 RepoFactory = Callable[[], AbstractAsyncContextManager[Repo]]
+UserRepoFactory = Callable[[str], RepoFactory]
 
 
 async def get_db(user: CurrentUser) -> AsyncIterator[AsyncSession]:
@@ -30,6 +32,15 @@ async def get_repo(session: Annotated[AsyncSession, Depends(get_db)]) -> Repo:
     return Repo(session)
 
 
+def _repo_factory_for(user_id: str) -> RepoFactory:
+    @asynccontextmanager
+    async def factory() -> AsyncIterator[Repo]:
+        async with user_scoped_session(user_id) as session:
+            yield Repo(session)
+
+    return factory
+
+
 def get_repo_factory(user: CurrentUser) -> RepoFactory:
     """Factory of fresh RLS-scoped repos.
 
@@ -37,13 +48,14 @@ def get_repo_factory(user: CurrentUser) -> RepoFactory:
     user message commits before streaming starts and the assistant message can
     be persisted from a shielded finally even if the client disconnected.
     """
+    return _repo_factory_for(user.user_id)
 
-    @asynccontextmanager
-    async def factory() -> AsyncIterator[Repo]:
-        async with user_scoped_session(user.user_id) as session:
-            yield Repo(session)
 
-    return factory
+def get_user_repo_factory() -> UserRepoFactory:
+    """Voice path: identity comes from the verified session token, not from
+    CurrentUser, so the route resolves the user_id itself and asks for a
+    factory afterwards. Same RLS-scoped sessions underneath."""
+    return _repo_factory_for
 
 
 class SafetyRecorder:
@@ -95,3 +107,7 @@ def get_chat_service(request: Request) -> ChatService:
 
 def get_classifier(request: Request) -> SafetyClassifier:
     return request.app.state.classifier
+
+
+def get_supabase_admin(request: Request) -> SupabaseAdmin:
+    return request.app.state.supabase_admin

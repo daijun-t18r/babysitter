@@ -4,9 +4,12 @@ import { useState } from "react";
 
 export function Composer({
   onSend,
+  onCall,
   disabled,
 }: {
   onSend: (text: string) => void;
+  /** When set (voice env configured), renders the big Call button. */
+  onCall?: () => void;
   disabled?: boolean;
 }) {
   const [text, setText] = useState("");
@@ -20,6 +23,25 @@ export function Composer({
 
   return (
     <div className="flex items-end gap-2 px-4 pt-2">
+      {onCall && (
+        <button
+          type="button"
+          onClick={onCall}
+          disabled={disabled}
+          aria-label="Start a voice call"
+          className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-accent/50 bg-accent-soft text-accent disabled:opacity-40"
+        >
+          <svg
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            aria-hidden
+          >
+            <path d="M6.6 10.8a15 15 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.24 11.4 11.4 0 0 0 3.6.58 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1 11.4 11.4 0 0 0 .57 3.6 1 1 0 0 1-.25 1z" />
+          </svg>
+        </button>
+      )}
       <label htmlFor="composer" className="sr-only">
         Message
       </label>
